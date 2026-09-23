@@ -111,4 +111,16 @@ QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
 QToolTip {{ background: {SIDEBAR}; color: #ffffff; border: none; padding: 6px 9px; }}
 QHeaderView::section {{ background: #eef2f7; color: {MUTED}; border: none; padding: 8px; font-size: 12px; }}
 QTableWidget {{ background: {CARD}; gridline-color: {LINE}; }}
+QDialog {{ background: {BG}; }}
+QLineEdit, QComboBox, QSpinBox, QDateTimeEdit {{
+    background: {CARD}; border: 1px solid {LINE}; border-radius: 6px;
+    padding: 5px 8px; color: {TEXT};
+}}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateTimeEdit:focus {{ border-color: {ACCENT}; }}
+QLabel#formLabel {{ color: {MUTED}; font-size: 12px; }}
+QFrame#quadCell {{ background: {CARD}; border: 1px solid {LINE}; border-radius: 12px; }}
+QFrame#quadCell[dropping="true"] {{ border: 2px dashed {ACCENT}; background: {ACCENT_SOFT}; }}
+QLabel#quadTitle {{ font-size: 13px; font-weight: 700; }}
+QPushButton#dangerBtn {{ background: transparent; color: {DANGER}; border: none; padding: 4px 8px; text-align: left; }}
+QPushButton#dangerBtn:hover {{ text-decoration: underline; }}
 """

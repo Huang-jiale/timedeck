@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import Qt, QRect, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import Qt, QPoint, QRect, Signal
+from PySide6.QtGui import QColor, QDrag, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QInputDialog, QLabel, QMenu, QPushButton, QScrollArea,
     QSizePolicy, QVBoxLayout, QWidget,
@@ -13,6 +13,7 @@ from models import STATUS_DOING, STATUS_TODO, Task, hours_text
 from ui import theme
 
 FOCUS_PRESETS = (15, 25, 45, 60)
+TASK_MIME = "timedeck/task/"
 
 
 class ElidedLabel(QLabel):
@@ -75,16 +76,25 @@ class TaskRow(QFrame):
     focus = Signal(str)
     advance = Signal(str)
     duration = Signal(str, int)
+    edit = Signal(str)
+    plan_today = Signal(str)
+    archive = Signal(str)
+    remove = Signal(str)
+    dragged = Signal(str)
 
     def __init__(self, task: Task, now: datetime, active_task_id: str | None, parent=None,
-                 compact: bool = False, default_min: int = 25):
+                 compact: bool = False, default_min: int = 25, today_button: bool = False,
+                 draggable: bool = False):
         super().__init__(parent)
         self.task = task
         self.compact = compact
+        self.draggable = draggable
+        self._press_at: QPoint | None = None
         self.default_min = default_min
         self.setObjectName("card")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFixedHeight(68)
+        self.setToolTip("双击编辑，右键更多操作")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -139,6 +149,12 @@ class TaskRow(QFrame):
                 chip.setToolTip("给这个任务选一段专注时长")
                 chip.clicked.connect(lambda: self._pick_duration(chip))
                 layout.addWidget(chip, 0, Qt.AlignVCenter)
+            if today_button:
+                plan = QPushButton("＋ 今日")
+                plan.setObjectName("chipBtn")
+                plan.setToolTip("截止日改到今天，进入今日计划")
+                plan.clicked.connect(lambda: self.plan_today.emit(task.id))
+                layout.addWidget(plan, 0, Qt.AlignVCenter)
             focus = QPushButton("▶ 专注")
             focus.setObjectName("chipBtn")
             focus.clicked.connect(lambda: self.focus.emit(task.id))
@@ -163,6 +179,38 @@ class TaskRow(QFrame):
                                           self.task.focus_min or self.default_min, 5, 240)
         if ok:
             self.duration.emit(self.task.id, minutes)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.edit.emit(self.task.id)
+
+    def mousePressEvent(self, event):
+        self._press_at = event.position().toPoint() if event.button() == Qt.LeftButton else None
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not self.draggable or self._press_at is None or not (event.buttons() & Qt.LeftButton):
+            return super().mouseMoveEvent(event)
+        if (event.position().toPoint() - self._press_at).manhattanLength() < 8:
+            return super().mouseMoveEvent(event)
+        self._press_at = None
+        data = QMimeData()
+        data.setText(TASK_MIME + self.task.id)
+        drag = QDrag(self)
+        drag.setMimeData(data)
+        drag.exec(Qt.MoveAction)
+
+    def contextMenuEvent(self, event):
+        task = self.task
+        menu = QMenu(self)
+        menu.addAction("编辑任务…", lambda: self.edit.emit(task.id))
+        menu.addAction("重新打开" if task.done else "标记完成",
+                       lambda: self.toggled.emit(task.id, not task.done))
+        menu.addAction("排到今天", lambda: self.plan_today.emit(task.id))
+        menu.addSeparator()
+        menu.addAction("取消归档" if task.archived else "归档", lambda: self.archive.emit(task.id))
+        menu.addAction("删除", lambda: self.remove.emit(task.id))
+        menu.exec(event.globalPos())
 
     def _meta_parts(self, now: datetime) -> list[str]:
         remaining = self.task.remaining_text(now)
@@ -194,6 +242,10 @@ class TodayView(QWidget):
     focus = Signal(str)
     advance = Signal(str)
     duration = Signal(str, int)
+    edit = Signal(str)
+    plan_today = Signal(str)
+    archive = Signal(str)
+    remove = Signal(str)
 
     def __init__(self, store, parent=None):
         super().__init__(parent)
@@ -235,35 +287,40 @@ class TodayView(QWidget):
             row.focus.connect(self.focus)
             row.advance.connect(self.advance)
             row.duration.connect(self.duration)
+            row.edit.connect(self.edit)
+            row.plan_today.connect(self.plan_today)
+            row.archive.connect(self.archive)
+            row.remove.connect(self.remove)
             self._rows[task.id] = row
             self.body.addWidget(row)
 
     def _buckets(self, now: datetime) -> list[tuple[str, list[Task]]]:
-        pool = self.store.active_tasks()
+        pool = [task for task in self.store.active_tasks() if not task.done]
         start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_end = start_of_day + timedelta(days=8)
         return [
-            ("已逾期", [t for t in pool if not t.done and t.is_overdue(now)]),
-            ("今天要做", [t for t in pool if not t.done and t.due_dt
+            ("已逾期", [t for t in pool if t.is_overdue(now)]),
+            ("今天要做", [t for t in pool if t.due_dt
                        and start_of_day <= t.due_dt < start_of_day + timedelta(days=1) and not t.is_overdue(now)]),
-            ("接下来一周", [t for t in pool if not t.done and t.due_dt
+            ("接下来一周", [t for t in pool if t.due_dt
                        and start_of_day + timedelta(days=1) <= t.due_dt < week_end]),
-            ("待安排", [t for t in pool if not t.done and t.due_dt is None]),
-            ("今天已完成", [t for t in pool if t.done and t.done_at and _safe_date(t.done_at) == now.date()]),
+            ("待安排", [t for t in pool if t.due_dt is None]),
         ]
 
     def _summary_text(self, now: datetime, buckets: list[tuple[str, list[Task]]]) -> str:
         counts = {name: len(tasks) for name, tasks in buckets}
         text = (f"{now:%m月%d日 %H:%M} · 逾期 {counts.get('已逾期', 0)} · 今天 {counts.get('今天要做', 0)}"
-                f" · 今天已完成 {counts.get('今天已完成', 0)}")
+                f" · 接下来一周 {counts.get('接下来一周', 0)}")
         if not buckets:
             text += "\n今天没有安排。用下方输入框加一条，支持这种写法：\n" \
                     "明天18:00 写项目周报 #工作 !3 90min"
+        else:
+            text += " · 已完成的去「月历」看"
         return text
 
     def refresh(self, now: datetime, active_task_id: str | None) -> None:
         buckets = [(name, tasks) for name, tasks in self._buckets(now) if tasks]
-        key = [[(name, tuple((t.id, t.focus_min) for t in tasks)) for name, tasks in buckets],
+        key = [[(name, tuple(_signature(task) for task in tasks)) for name, tasks in buckets],
                active_task_id, int(self.store.settings["focus_min"])]
         if key == self._key:
             if self.summary is not None:
@@ -278,15 +335,14 @@ class TodayView(QWidget):
         self.summary.setObjectName("muted")
         self.summary.setWordWrap(True)
         self.body.addWidget(self.summary)
-        accents = {"已逾期": theme.DANGER, "今天要做": theme.ACCENT, "今天已完成": theme.DONE}
+        accents = {"已逾期": theme.DANGER, "今天要做": theme.ACCENT}
         for name, tasks in buckets:
             self._header(f"{name} · {len(tasks)}", accents.get(name, theme.MUTED))
             self._group(tasks, now, active_task_id)
         self.body.addStretch(1)
 
 
-def _safe_date(raw: str):
-    try:
-        return datetime.fromisoformat(raw).date()
-    except ValueError:
-        return None
+def _signature(task: Task) -> tuple:
+    """决定这一行要不要整只重建：文本/时长/标签/状态变了就重建，只有剩余时间变了走 tick。"""
+    return (task.id, task.title, task.due, task.focus_min, task.status, task.priority,
+            tuple(task.tags), task.est_min, task.spent_min, task.quadrant)

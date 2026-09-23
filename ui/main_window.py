@@ -10,13 +10,15 @@ from PySide6.QtWidgets import (
 
 from models import STATUS_DOING, parse_quick
 from ui import theme
-from ui.all_view import AllView
 from ui.calendar_view import CalendarView
+from ui.quadrant_view import QuadrantView
+from ui.schedule_dialog import ScheduleDialog
 from ui.settings_dialog import SettingsDialog
+from ui.task_dialog import TaskDialog
 from ui.today_view import TodayView
 from ui.timer import MODE_BREAK, MODE_FOCUS, MODE_IDLE, FocusTimer
 
-NAV = [("今日", "today"), ("月历", "calendar"), ("全部", "all")]
+NAV = [("今日", "today"), ("月历", "calendar"), ("四象限", "quadrant")]
 
 
 class TimerCapsule(QFrame):
@@ -89,11 +91,12 @@ class MainWindow(QWidget):
         self.stack = QStackedWidget()
         self.today_view = TodayView(store)
         self.calendar_view = CalendarView(store)
-        self.all_view = AllView(store)
-        for widget in (self.today_view, self.calendar_view, self.all_view):
+        self.quadrant_view = QuadrantView(store)
+        for widget in (self.today_view, self.calendar_view, self.quadrant_view):
             self.stack.addWidget(widget)
         right.addWidget(self.stack, 1)
-        right.addLayout(self._quick_bar())
+        self.quick_host = self._quick_bar()
+        right.addWidget(self.quick_host)
         wrapper = QWidget()
         wrapper.setLayout(right)
         body.addWidget(wrapper, 1)
@@ -102,13 +105,20 @@ class MainWindow(QWidget):
         self.nav_buttons: dict[str, QPushButton] = {}
         self.show_view("today")
 
-        self.today_view.toggled.connect(self._toggle_done)
-        self.today_view.focus.connect(self._start_focus)
-        self.today_view.advance.connect(self._advance)
-        self.today_view.duration.connect(self._set_duration)
+        for view in (self.today_view, self.quadrant_view):
+            view.toggled.connect(self._toggle_done)
+            view.focus.connect(self._start_focus)
+            view.advance.connect(self._advance)
+            view.duration.connect(self._set_duration)
+            view.edit.connect(self._edit_task)
+            view.plan_today.connect(self._plan_today)
+            view.archive.connect(self._archive_task)
+            view.remove.connect(self._remove_task)
         self.calendar_view.focus.connect(self._start_focus)
-        self.all_view.toggled.connect(self._toggle_done)
-        self.all_view.focus.connect(self._start_focus)
+        self.calendar_view.edit.connect(self._edit_task)
+        self.quadrant_view.assigned.connect(self._assign)
+        self.quadrant_view.create.connect(lambda: self._edit_task(None))
+        self.quadrant_view.schedule.connect(self._open_schedule)
         self.focus_task.connect(self._start_focus)
 
         self._clock = QTimer(self)
@@ -177,8 +187,9 @@ class MainWindow(QWidget):
             self.tag_host.addWidget(button)
 
     def show_tag(self, tag: str) -> None:
-        self.show_view("all")
-        self.all_view.select_tag(tag)
+        self.show_view("quadrant")
+        self.quadrant_view.search.setText(tag)
+        self.quadrant_view.refresh(datetime.now(), None)
 
     def _topbar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
@@ -205,19 +216,31 @@ class MainWindow(QWidget):
         self.float_toggle.setText("悬浮窗 · 开" if on else "悬浮窗 · 关")
         self.float_visibility.emit(on)
 
-    def _quick_bar(self) -> QVBoxLayout:
+    def _quick_bar(self) -> QWidget:
         box = QVBoxLayout()
         box.setSpacing(4)
         self.quick = QLineEdit()
         self.quick.setObjectName("quick")
         self.quick.setPlaceholderText("快速添加：明天18:00 写项目周报 #工作 !3 90min   （回车保存）")
         self.quick.returnPressed.connect(self._add_quick)
+        self.new_task = QPushButton("＋ 新建任务")
+        self.new_task.setObjectName("ghostBtn")
+        self.new_task.setFixedHeight(38)
+        self.new_task.setCursor(Qt.PointingHandCursor)
+        self.new_task.setToolTip("逐项填写开始时间、专注时长、标签等")
+        self.new_task.clicked.connect(lambda: self._edit_task(None))
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(self.quick, 1)
+        row.addWidget(self.new_task)
         tip = QLabel("支持：今天 / 明天 / 后天 / 周五 / 9-28 / 18:00 ；#标签 ；!1-!3 优先级 ；90min 或 1.5h 预估时长")
         tip.setObjectName("muted")
         tip.setStyleSheet("font-size: 11px; padding-bottom: 8px;")
-        box.addWidget(self.quick)
+        box.addLayout(row)
         box.addWidget(tip)
-        return box
+        host = QWidget()
+        host.setLayout(box)
+        return host
 
     def _add_quick(self) -> None:
         text = self.quick.text().strip()
@@ -231,9 +254,10 @@ class MainWindow(QWidget):
         self.refresh()
 
     def show_view(self, key: str) -> None:
-        index = {"today": 0, "calendar": 1, "all": 2}[key]
+        index = {"today": 0, "calendar": 1, "quadrant": 2}[key]
         self.stack.setCurrentIndex(index)
-        self.view_title.setText({"today": "今日", "calendar": "月历工作视图", "all": "全部任务"}[key])
+        self.view_title.setText({"today": "今日", "calendar": "月历工作视图", "quadrant": "时间管理四象限"}[key])
+        self.quick_host.setVisible(key != "calendar")
         for name, button in self.nav_buttons.items():
             button.setProperty("active", "true" if name == key else "false")
             button.style().unpolish(button)
@@ -263,6 +287,52 @@ class MainWindow(QWidget):
         self.store.update(task_id, focus_min=minutes)
         self.refresh()
 
+    def _edit_task(self, task_id: str | None) -> None:
+        task = self.store.get(task_id) if task_id else None
+        dialog = TaskDialog(self.store, task, parent=self.window())
+        if dialog.exec() != TaskDialog.Accept:
+            return
+        if dialog.delete_requested:
+            self.refresh()
+            return
+        fields = dialog.fields()
+        if task:
+            self.store.update(task.id, **fields)
+        else:
+            self.store.add(**fields)
+        self.refresh()
+
+    def _plan_today(self, task_id: str) -> None:
+        task = self.store.get(task_id)
+        if not task:
+            return
+        now = datetime.now()
+        keep = task.due_dt or task.start_dt
+        when = now.replace(hour=keep.hour if keep else 18, minute=keep.minute if keep else 0,
+                           second=0, microsecond=0)
+        self.store.update(task_id, due=when)
+        self.refresh()
+
+    def _assign(self, quadrant, task_id: str) -> None:
+        self.store.update(task_id, quadrant=quadrant)
+        self.refresh()
+
+    def _archive_task(self, task_id: str) -> None:
+        task = self.store.get(task_id)
+        if task:
+            self.store.update(task_id, archived=not task.archived)
+        self.refresh()
+
+    def _remove_task(self, task_id: str) -> None:
+        self.store.remove(task_id)
+        self.refresh()
+
+    def _open_schedule(self) -> None:
+        dialog = ScheduleDialog(self.store, self.window())
+        if dialog.exec() == ScheduleDialog.Accept:
+            self.store.add_many(dialog.rows())
+            self.refresh()
+
     def _toggle_done(self, task_id: str, done: bool) -> None:
         if done and self.timer.task_id == task_id and self.timer.mode == MODE_FOCUS:
             self.timer.stop(commit=True)
@@ -278,6 +348,6 @@ class MainWindow(QWidget):
         if index == 1:
             self.calendar_view.refresh()
         elif index == 2:
-            self.all_view.refresh()
+            self.quadrant_view.refresh(now, active)
         else:
             self.today_view.refresh(now, active)

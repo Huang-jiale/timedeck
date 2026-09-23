@@ -155,6 +155,7 @@ class MonthGrid(QWidget):
 
 class DayDetail(QFrame):
     focus = Signal(str)
+    edit = Signal(str)
 
     def __init__(self, store, parent=None):
         super().__init__(parent)
@@ -178,7 +179,7 @@ class DayDetail(QFrame):
         self.body.setSpacing(6)
         self.scroll.setWidget(self.host)
         layout.addWidget(self.scroll, 1)
-        self.hint = QLabel("点左侧日历格子查看当天任务与专注时长。")
+        self.hint = QLabel("月历只用来回看：点左侧格子看当天做过什么，要创建或改任务去「今日」和「四象限」。")
         self.hint.setObjectName("muted")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
@@ -199,6 +200,7 @@ class DayDetail(QFrame):
             row = TaskRow(task, now, None, self.host, compact=True)
             row.setFixedHeight(58)
             row.focus.connect(self.focus)
+            row.edit.connect(self.edit)
             self.body.addWidget(row)
         if not summary["tasks"]:
             empty = QLabel("这天没有排任务。", self.host)
@@ -209,6 +211,7 @@ class DayDetail(QFrame):
 
 class CalendarView(QWidget):
     focus = Signal(str)
+    edit = Signal(str)
 
     def __init__(self, store, parent=None):
         super().__init__(parent)

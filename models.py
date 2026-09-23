@@ -9,6 +9,14 @@ STATUS_TODO = "todo"
 STATUS_DOING = "doing"
 STATUS_DONE = "done"
 
+# 四象限：1 重要且紧急 / 2 重要不紧急 / 3 紧急不重要 / 4 不紧急不重要；None 表示还没分派
+QUADRANTS = {
+    1: ("重要且紧急", "马上做"),
+    2: ("重要不紧急", "排期做"),
+    3: ("紧急不重要", "快速处理"),
+    4: ("不紧急不重要", "有空再说"),
+}
+
 WEEKDAY_OFFSET = {"周一": 0, "周二": 1, "周三": 2, "周四": 3, "周五": 4, "周六": 5, "周日": 6}
 WORD_OFFSET = {"今天": 0, "明天": 1, "后天": 2, "大后天": 3}
 
@@ -71,16 +79,23 @@ class Task:
     created: str = ""
     done_at: str | None = None
     archived: bool = False
+    start: str | None = None
+    quadrant: int | None = None
 
     @classmethod
     def create(cls, title: str, due: datetime | None = None, tags: list[str] | None = None,
-               priority: int = 1, est_min: int = 30) -> Task:
+               priority: int = 1, est_min: int = 30, start: datetime | None = None) -> Task:
         return cls(id=new_id(), title=title.strip(), due=iso(due), est_min=est_min,
-                   tags=tags or [], priority=priority, created=iso(datetime.now()) or "")
+                   tags=tags or [], priority=priority, created=iso(datetime.now()) or "",
+                   start=iso(start))
 
     @property
     def due_dt(self) -> datetime | None:
         return parse_dt(self.due)
+
+    @property
+    def start_dt(self) -> datetime | None:
+        return parse_dt(self.start)
 
     @property
     def done(self) -> bool:
@@ -104,6 +119,7 @@ class Task:
             "tags": list(self.tags), "priority": self.priority,
             "status": self.status, "created": self.created,
             "done_at": self.done_at, "archived": self.archived,
+            "start": self.start, "quadrant": self.quadrant,
         }
 
     @classmethod
@@ -121,6 +137,8 @@ class Task:
             created=raw.get("created") or "",
             done_at=raw.get("done_at"),
             archived=bool(raw.get("archived")),
+            start=raw.get("start"),
+            quadrant=int(raw["quadrant"]) if raw.get("quadrant") in (1, 2, 3, 4) else None,
         )
 
 

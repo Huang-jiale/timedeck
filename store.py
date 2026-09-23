@@ -26,18 +26,24 @@ def seed_focus(tasks: list[Task]) -> list[dict]:
 
 def seed_tasks() -> list[Task]:
     today = datetime.now().replace(hour=18, minute=0, second=0, microsecond=0)
+    # 标题, 截止, 标签, 优先级, 预估, 已用, 状态, 象限
     plan = [
-        ("整理本周项目周报", today + timedelta(hours=2), ["工作"], 3, 90, 25, "doing"),
-        ("英语学习：阅读 3 篇", today + timedelta(days=1), ["学习"], 2, 60, 0, "todo"),
-        ("晨间拉伸 30 分钟", today - timedelta(hours=5), ["生活"], 1, 45, 45, "done"),
-        ("预约牙医 + 交房租", today + timedelta(days=3), ["杂事"], 1, 15, 0, "todo"),
-        ("复盘本周数据看板", today + timedelta(days=2), ["工作"], 2, 40, 0, "todo"),
+        ("整理本周项目周报", today + timedelta(hours=2), ["工作"], 3, 90, 25, "doing", 1),
+        ("英语学习：阅读 3 篇", today + timedelta(days=1), ["学习"], 2, 60, 0, "todo", 2),
+        ("晨间拉伸 30 分钟", today - timedelta(hours=5), ["生活"], 1, 45, 45, "done", 2),
+        ("预约牙医 + 交房租", today + timedelta(days=3), ["杂事"], 1, 15, 0, "todo", 3),
+        ("复盘本周数据看板", today + timedelta(days=2), ["工作"], 2, 40, 0, "todo", 2),
+        ("整理手机相册备份", today + timedelta(days=9), ["生活"], 1, 30, 0, "todo", 4),
+        ("读完手上那本专业书", None, ["学习"], 2, 180, 0, "todo", None),
+        ("给桌面工具写使用心得", None, ["杂事"], 1, 25, 0, "todo", None),
     ]
     tasks = []
-    for title, due, tags, prio, est, spent, status in plan:
+    for title, due, tags, prio, est, spent, status, quadrant in plan:
         task = Task.create(title, due, tags, prio, est)
         task.spent_min = spent
         task.status = status
+        task.quadrant = quadrant
+        task.focus_min = min(est, 25)
         if status == STATUS_DONE:
             task.done_at = iso(due)
         tasks.append(task)
@@ -173,17 +179,26 @@ class Store(QObject):
             tags=fields.get("tags") or [],
             priority=fields.get("priority", 1),
             est_min=fields.get("est_min") or 30,
+            start=fields.get("start"),
         )
+        for key in ("focus_min", "quadrant", "status"):
+            if fields.get(key) is not None:
+                setattr(task, key, fields[key])
         self.tasks.append(task)
         self.mark_dirty("add")
         return task
+
+    def add_many(self, rows: list[dict]) -> list[Task]:
+        created = [self.add(**row) for row in rows]
+        self.flush()
+        return created
 
     def update(self, task_id: str, **fields) -> None:
         task = self.get(task_id)
         if not task:
             return
         for key, value in fields.items():
-            if key == "due" and isinstance(value, datetime):
+            if key in {"due", "start"} and isinstance(value, datetime):
                 value = iso(value)
             if hasattr(task, key):
                 setattr(task, key, value)

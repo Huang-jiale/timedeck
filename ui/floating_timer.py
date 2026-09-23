@@ -184,7 +184,8 @@ class FloatingTimer(QWidget):
 
     def _default_pos(self) -> QPoint:
         screen = QApplication.primaryScreen().availableGeometry()
-        return QPoint(screen.right() - self.width() - 12, screen.bottom() - self.height() - 12)
+        shape = self._shape()
+        return QPoint(screen.right() - shape.right() - 12, screen.bottom() - shape.bottom() - 12)
 
     def restore_position(self) -> None:
         saved = self.store.float_pos
@@ -287,25 +288,29 @@ class FloatingTimer(QWidget):
             self.pause_requested.emit()
 
     def _snap(self) -> None:
-        pin = 8
+        """贴边要按可见卡片算：窗口四周还有 EDGE 宽的透明边，按窗口外框对齐会突出来一块。"""
+        pin = 4
+        shape = self._shape()
         center = self.frameGeometry().center()
         target = QApplication.primaryScreen().availableGeometry()
         for screen in QApplication.screens():
             if screen.availableGeometry().contains(center):
                 target = screen.availableGeometry()
                 break
-        left, top = target.left(), target.top()
-        right, bottom = target.right() - self.width(), target.bottom() - self.height()
-        x = max(left, min(self.x(), right))
-        y = max(top, min(self.y(), bottom))
-        if x - left < SNAP:
-            x = left + pin
-        if right - x < SNAP:
-            x = right - pin
-        if y - top < SNAP:
-            y = top + pin
-        if bottom - y < SNAP:
-            y = bottom - pin
+        left_stop = target.left() - shape.left() + pin
+        right_stop = target.right() - shape.right() - pin
+        top_stop = target.top() - shape.top() + pin
+        bottom_stop = target.bottom() - shape.bottom() - pin
+        x = min(max(self.x(), left_stop), right_stop)
+        y = min(max(self.y(), top_stop), bottom_stop)
+        if x - left_stop < SNAP:
+            x = left_stop
+        elif right_stop - x < SNAP:
+            x = right_stop
+        if y - top_stop < SNAP:
+            y = top_stop
+        elif bottom_stop - y < SNAP:
+            y = bottom_stop
         self.move(x, y)
         index = 0
         moved = self.frameGeometry().center()
