@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 打包中间产物
+.build/
+*.spec
+
+# 截图调试数据（含个人任务内容，不入库）
+.shotdata/
+
+# 便携版产物在仓库同级目录，不进版本库
+/发布/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
