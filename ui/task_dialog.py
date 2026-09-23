@@ -12,6 +12,7 @@ from models import QUADRANTS, STATUS_DOING, STATUS_DONE, STATUS_TODO, Task
 from ui import theme
 
 STATUS_CHOICES = [("待办", STATUS_TODO), ("进行中", STATUS_DOING), ("已完成", STATUS_DONE)]
+UNSET = "__unset__"
 
 
 def tags_from_text(text: str) -> list[str]:
@@ -81,17 +82,6 @@ class TaskDialog(QDialog):
         if not existing:
             self.tag_chips.hide()
 
-        priority = QComboBox()
-        for label, value in (("低", 1), ("中", 2), ("高", 3)):
-            priority.addItem(label, value)
-        priority.setCurrentIndex({"1": 0, "2": 1, "3": 2}.get(str(task.priority if task else preset.get("priority", 1)), 0))
-
-        est = QSpinBox()
-        est.setRange(5, 1440)
-        est.setSingleStep(15)
-        est.setSuffix(" 分钟")
-        est.setValue(int(task.est_min if task else preset.get("est_min") or 60))
-
         focus = QSpinBox()
         focus.setRange(0, 480)
         focus.setSingleStep(5)
@@ -101,12 +91,16 @@ class TaskDialog(QDialog):
         self.focus_hint = QLabel(f"0 表示跟随默认（当前默认 {default_min} 分钟）")
 
         quadrant = QComboBox()
-        quadrant.addItem("还没分派", None)
+        quadrant.addItem("请选择象限…", UNSET)
+        quadrant.addItem("暂不分派，放任务池", None)
         for key, (label, _) in QUADRANTS.items():
             quadrant.addItem(f"Q{key} · {label}", key)
         wanted = task.quadrant if task else preset.get("quadrant")
-        index = quadrant.findData(wanted)
+        index = quadrant.findData(wanted) if task or preset.get("quadrant") else 0
         quadrant.setCurrentIndex(index if index >= 0 else 0)
+        self.quadrant_hint = QLabel("必须先定一格才能保存；没想好就选「暂不分派，放任务池」，之后拖拽调整。")
+        self.quadrant_hint.setObjectName("muted")
+        self.quadrant_hint.setStyleSheet("font-size: 11px;")
 
         status = QComboBox()
         for label, value in STATUS_CHOICES:
@@ -122,22 +116,20 @@ class TaskDialog(QDialog):
         form.addRow("截止时间", self._pair(due_on, due_at))
         form.addRow("标签", tag_input)
         form.addRow("", self.tag_chips)
-        form.addRow("优先级", priority)
-        form.addRow("预估总时长", est)
+        form.addRow("象限", quadrant)
+        form.addRow("", self.quadrant_hint)
         form.addRow("一段专注", focus)
         form.addRow("", self.focus_hint)
-        form.addRow("象限", quadrant)
         if task:
             form.addRow("状态", status)
 
         self.widgets = {"title": title, "start_on": start_on, "start_at": start_at,
                         "due_on": due_on, "due_at": due_at, "tags": tag_input,
-                        "priority": priority, "est": est, "focus": focus,
-                        "quadrant": quadrant, "status": status}
+                        "focus": focus, "quadrant": quadrant, "status": status}
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText("保存")
-        buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         row = QHBoxLayout()
@@ -187,17 +179,24 @@ class TaskDialog(QDialog):
             "start": self.widgets["start_at"].dateTime().toPython() if self.widgets["start_on"].isChecked() else None,
             "due": self.widgets["due_at"].dateTime().toPython() if self.widgets["due_on"].isChecked() else None,
             "tags": tags,
-            "priority": int(self.widgets["priority"].currentData()),
-            "est_min": int(self.widgets["est"].value()),
             "focus_min": focus or None,
-            "quadrant": self.widgets["quadrant"].currentData(),
+            "quadrant": None if self.widgets["quadrant"].currentData() == UNSET
+            else self.widgets["quadrant"].currentData(),
             "status": self.widgets["status"].currentData(),
         }
 
     def _accept(self) -> None:
-        if not self.widgets["title"].text().strip():
-            self.widgets["title"].setFocus()
-            self.widgets["title"].setStyleSheet(f"border: 1px solid {theme.DANGER};")
+        title = self.widgets["title"]
+        if not title.text().strip():
+            title.setFocus()
+            title.setStyleSheet(f"border: 1px solid {theme.DANGER};")
+            return
+        quadrant = self.widgets["quadrant"]
+        if quadrant.currentData() == UNSET:
+            quadrant.setFocus()
+            quadrant.setStyleSheet(f"border: 1px solid {theme.DANGER};")
+            self.quadrant_hint.setText("必须先选一个象限（或选「暂不分派，放任务池」）才能保存。")
+            self.quadrant_hint.setStyleSheet("font-size: 11px; color: %s;" % theme.DANGER)
             return
         self.accept()
 

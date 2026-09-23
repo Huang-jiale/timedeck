@@ -102,13 +102,17 @@ def main() -> int:
     save(window, out / "05-quadrant.png")
 
     from ui.task_dialog import TaskDialog
-    dialog = TaskDialog(store, store.tasks[1], window)
+    dialog = TaskDialog(store, None, parent=window)
+    dialog.widgets["title"].setText("写项目周报")
+    dialog.widgets["tags"].setText("工作")
+    dialog.widgets["due_on"].setChecked(True)
     save(dialog, out / "06-task-dialog.png")
 
     from ui.schedule_dialog import ScheduleDialog
-    schedule = ScheduleDialog(store, window)
+    schedule = ScheduleDialog(store, parent=window)
     schedule.title.setText("晨跑 5 公里")
     schedule.mode.setCurrentIndex(2)
+    schedule.quadrant.setCurrentIndex(3)
     schedule.weekday_boxes[0].setChecked(True)
     schedule.weekday_boxes[2].setChecked(True)
     schedule.weekday_boxes[4].setChecked(True)

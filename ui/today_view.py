@@ -219,7 +219,7 @@ class TaskRow(QFrame):
             if self.task.status == STATUS_DOING:
                 parts.append("进行中")
             return parts
-        parts.append(f"已用 {hours_text(self.task.spent_min)}/预估 {hours_text(self.task.est_min)}")
+        parts.append(f"已用 {hours_text(self.task.spent_min)}")
         if self.task.status == STATUS_DOING:
             parts.append("进行中")
         return parts

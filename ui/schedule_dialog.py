@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from models import QUADRANTS
+from ui.task_dialog import UNSET
 
 MODES = [("每天", "daily"), ("每隔 N 天", "every"), ("每个工作日", "workday"), ("每周固定几天", "weekday")]
 WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -68,23 +69,17 @@ class ScheduleDialog(QDialog):
 
         self.tags = QLineEdit()
         self.tags.setPlaceholderText("空格分隔，可留空")
-        self.priority = QComboBox()
-        for label, value in (("低", 1), ("中", 2), ("高", 3)):
-            self.priority.addItem(label, value)
-        self.est = QSpinBox()
-        self.est.setRange(5, 1440)
-        self.est.setSingleStep(15)
-        self.est.setSuffix(" 分钟")
-        self.est.setValue(30)
         self.focus = QSpinBox()
         self.focus.setRange(0, 480)
         self.focus.setSingleStep(5)
         self.focus.setSuffix(" 分钟")
         self.focus.setValue(int(self.store.settings["focus_min"]))
         self.quadrant = QComboBox()
+        self.quadrant.addItem("请选择象限…", UNSET)
         self.quadrant.addItem("不分象限（进任务池）", None)
         for key, (label, _) in QUADRANTS.items():
             self.quadrant.addItem(f"Q{key} · {label}", key)
+        self.quadrant.setCurrentIndex(0)
         self.suffix_date = QCheckBox("标题后面带上日期")
         self.suffix_date.setChecked(True)
 
@@ -119,16 +114,14 @@ class ScheduleDialog(QDialog):
         form.addRow("", self.weekday_row)
         form.addRow("范围", self._wrap(end_row))
         form.addRow("标签", self.tags)
-        form.addRow("优先级", self.priority)
-        form.addRow("预估", self.est)
-        form.addRow("一段专注", self.focus)
         form.addRow("象限", self.quadrant)
+        form.addRow("一段专注", self.focus)
         form.addRow("", self.suffix_date)
         form.addRow("", self.preview)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("生成任务")
-        buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("生成任务")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
@@ -139,7 +132,7 @@ class ScheduleDialog(QDialog):
         box.addWidget(buttons)
 
         for widget in (self.title, self.start_on, self.at_time, self.interval,
-                       self.repeat_times, self.until, self.tags, self.est, self.focus):
+                       self.repeat_times, self.until, self.tags, self.focus):
             for signal in ("textChanged", "dateChanged", "dateTimeChanged", "valueChanged"):
                 if hasattr(widget, signal):
                     getattr(widget, signal).connect(self._preview)
@@ -198,12 +191,12 @@ class ScheduleDialog(QDialog):
         tags = [tag for tag in self.tags.text().replace("#", " ").replace("，", " ").split() if tag]
         focus = self.focus.value()
         rows = []
+        quadrant = self.quadrant.currentData()
         for stamp in self.dates():
             name = f"{title} {stamp:%m-%d}" if self.suffix_date.isChecked() else title
             rows.append({"title": name, "due": stamp, "tags": list(tags),
-                         "priority": int(self.priority.currentData()),
-                         "est_min": self.est.value(), "focus_min": focus or None,
-                         "quadrant": self.quadrant.currentData()})
+                         "focus_min": focus or None,
+                         "quadrant": None if quadrant == UNSET else quadrant})
         return rows
 
     def _preview(self, *_args) -> None:
@@ -216,6 +209,10 @@ class ScheduleDialog(QDialog):
         self.preview.setText(f"将生成：{head}{more}")
 
     def _accept(self) -> None:
+        if self.quadrant.currentData() == UNSET:
+            self.quadrant.setStyleSheet("border: 1px solid #e0574f;")
+            self.preview.setText("先选一个象限（或选「不分象限（进任务池）」）再生成。")
+            return
         if not self.dates():
             self._preview()
             return

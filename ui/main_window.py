@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -221,7 +221,7 @@ class MainWindow(QWidget):
         box.setSpacing(4)
         self.quick = QLineEdit()
         self.quick.setObjectName("quick")
-        self.quick.setPlaceholderText("快速添加：明天18:00 写项目周报 #工作 !3 90min   （回车保存）")
+        self.quick.setPlaceholderText("快速添加：明天18:00 写项目周报 #工作   （回车保存）")
         self.quick.returnPressed.connect(self._add_quick)
         self.new_task = QPushButton("＋ 新建任务")
         self.new_task.setObjectName("ghostBtn")
@@ -233,7 +233,7 @@ class MainWindow(QWidget):
         row.setSpacing(8)
         row.addWidget(self.quick, 1)
         row.addWidget(self.new_task)
-        tip = QLabel("支持：今天 / 明天 / 后天 / 周五 / 9-28 / 18:00 ；#标签 ；!1-!3 优先级 ；90min 或 1.5h 预估时长")
+        tip = QLabel("支持：今天 / 明天 / 后天 / 周五 / 9-28 / 2026-10-03 08:30 ；#标签")
         tip.setObjectName("muted")
         tip.setStyleSheet("font-size: 11px; padding-bottom: 8px;")
         box.addLayout(row)
@@ -267,7 +267,7 @@ class MainWindow(QWidget):
 
     def open_settings(self) -> None:
         dialog = SettingsDialog(self.store, self.window())
-        if dialog.exec():
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             dialog.apply()
         self.calendar_view.refresh()
         self.refresh()
@@ -290,7 +290,7 @@ class MainWindow(QWidget):
     def _edit_task(self, task_id: str | None) -> None:
         task = self.store.get(task_id) if task_id else None
         dialog = TaskDialog(self.store, task, parent=self.window())
-        if dialog.exec() != TaskDialog.Accept:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.delete_requested:
             self.refresh()
@@ -329,7 +329,7 @@ class MainWindow(QWidget):
 
     def _open_schedule(self) -> None:
         dialog = ScheduleDialog(self.store, self.window())
-        if dialog.exec() == ScheduleDialog.Accept:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self.store.add_many(dialog.rows())
             self.refresh()
 

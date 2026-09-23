@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -14,6 +16,23 @@ from ui import theme
 from ui.floating_timer import FloatingTimer
 from ui.main_window import MainWindow
 from ui.timer import MODE_FOCUS, MODE_IDLE, FocusTimer
+
+
+def install_crash_log(log_path: Path) -> None:
+    """打包成无控制台的 exe 后，界面里的报错会静默闪退；落一份 error.log 才查得出来。"""
+
+    def hook(kind, value, tb):
+        text = "".join(traceback.format_exception(kind, value, tb))
+        try:
+            if log_path.exists() and log_path.stat().st_size > 200_000:
+                log_path.unlink()
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}]\n{text}")
+        except OSError:
+            pass
+        print(text, file=sys.stderr)
+
+    sys.excepthook = hook
 
 
 def make_icon(ring: bool = True) -> QIcon:
@@ -182,6 +201,7 @@ def main() -> int:
     app.setStyle("Fusion")
     app.setStyleSheet(theme.build_qss())
     store = Store()
+    install_crash_log(store.data_path.parent / "error.log")
     window = TimeDeck(store)
     window.reveal()
 

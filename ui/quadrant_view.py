@@ -68,6 +68,7 @@ class QuadCell(QFrame):
         outer.addWidget(self.scroll, 1)
         self._empty = QLabel("把任务拖进来。")
         self._empty.setObjectName("muted")
+        self._empty.setWordWrap(True)
         self._empty.setStyleSheet("font-size: 11px; padding: 6px 2px;")
         self.body.addWidget(self._empty)
         self.body.addStretch(1)
@@ -82,11 +83,13 @@ class QuadCell(QFrame):
                 widget.setParent(None)
                 widget.deleteLater()
 
-    def show_tasks(self, tasks: list[Task], now: datetime, active_id: str | None, store) -> None:
+    def show_tasks(self, tasks: list[Task], now: datetime, active_id: str | None, store,
+                   empty_hint: str | None = None) -> None:
         self.clear_rows()
         self.count.setText(str(len(tasks)))
         self._empty.setVisible(not tasks)
         if not tasks:
+            self._empty.setText(empty_hint or "把任务拖进来。")
             self.body.addWidget(self._empty)
             self.body.addStretch(1)
             return
@@ -249,8 +252,10 @@ class QuadrantView(QWidget):
                 cell.tick(now)
             return
         self._key = key
+        hint = ("这里还没有待办：任务都做完的话去「月历」回看，"
+                "要加新的点右上「＋ 新建任务」或在下面输入框敲一句回车。") if not any(groups.values()) else None
         for quadrant, cell in self.cells.items():
-            cell.show_tasks(groups[quadrant], now, active_task_id, self.store)
+            cell.show_tasks(groups[quadrant], now, active_task_id, self.store, hint)
         planned = sum(len(groups[q]) for q in (1, 2, 3, 4))
         self.footer.setText(f"已分象限 {planned} 条 · 池子里 {len(groups[None])} 条 · "
                             f"已完成 {getattr(self, '_done_count', 0)} 条在「月历」里回看")
