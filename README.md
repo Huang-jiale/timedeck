@@ -3,8 +3,8 @@
 一个 Windows 桌面待办 + 时间管理小工具：**四象限排任务**、**倒计时专注**、**批量排期**、**右下角常驻悬浮窗**、**月历负荷热力图**。
 纯本地运行，零配置，数据是一个你能直接打开看的 JSON 文件。
 
-不想配环境：到 [Releases](https://github.com/Huang-jiale/timedeck/releases/latest) 下载
-`TimeDeck-0.1.0-win-x64-portable.zip`（约 44 MB），解压后双击 `TimeDeck\TimeDeck.exe` 即可，
+不想配环境：到 [Releases](https://github.com/Huang-jiale/timedeck/releases/latest) 下载最新的
+`TimeDeck-*-win-x64-portable.zip`（约 44 MB），解压后双击 `TimeDeck\TimeDeck.exe` 即可，
 对方电脑**不需要装 Python**。
 
 ## 四个视图
