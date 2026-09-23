@@ -43,6 +43,16 @@ build_portable.bat
 
 ## 界面
 
+| 今日 | 月历负荷 |
+| --- | --- |
+| ![today](shots/01-today.png) | ![calendar](shots/02-calendar.png) |
+| **专注进行中** | **全部任务** |
+| ![running](shots/04-today-running.png) | ![all](shots/05-all.png) |
+
+悬浮窗（右下角常驻，左为展开态、右为收起的一行药丸）：
+
+![float-expanded](shots/06-float-expanded.png) ![float-pill](shots/07-float-pill.png)
+
 | 视图 | 说明 |
 | --- | --- |
 | 今日 | 分组任务列表 + 快速添加 |
